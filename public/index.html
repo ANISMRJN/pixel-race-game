@@ -1,105 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pixel Track Stars</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* MARIO-STYLE CSS */
-        body { 
-            background: #5c94fc; /* Classic NES Sky Blue */
-            color: white; 
-            font-family: 'Courier New', Courier, monospace; 
-            margin: 0; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            height: 100vh; 
-            overflow: hidden; 
-        }
-
-        canvas { 
-            background: #4a7c44; /* Grass Green */
-            border: 6px solid #8b4513; /* Dirt/Wood Border */
-            image-rendering: pixelated; 
-            box-shadow: 0 10px 0 #5d2e0a; 
-            max-width: 95vw;
-        }
-
-        #ui-container {
-            position: absolute;
-            top: 20px;
-            text-align: center;
-            text-shadow: 3px 3px #000;
-        }
-
-        /* JOIN SCREEN OVERLAY */
-        #overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.85);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-        }
-
-        .login-card {
-            background: white;
-            padding: 40px;
-            border-radius: 20px;
-            border: 8px solid #f8b800;
-            color: #333;
-            text-align: center;
-        }
-
-        input {
-            padding: 15px;
-            font-size: 1.2rem;
-            border: 4px solid #5c94fc;
-            border-radius: 10px;
-            outline: none;
-            width: 200px;
-            font-family: inherit;
-        }
-
-        button {
-            padding: 15px 30px;
-            font-size: 1.5rem;
-            background: #ff4d4d;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            box-shadow: 0 6px 0 #b33636;
-            font-family: inherit;
-            margin-top: 15px;
-        }
-
-        button:active {
-            transform: translateY(4px);
-            box-shadow: 0 2px 0 #b33636;
-        }
+        body { background: #5c94fc; color: white; font-family: 'Courier New', monospace; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        canvas { background: #4a7c44; border: 8px solid #8b4513; image-rendering: pixelated; box-shadow: 0 10px 0 #5d2e0a; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(92, 148, 252, 0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        .card { background: white; padding: 30px; border-radius: 20px; border: 6px solid #f8b800; color: #333; text-align: center; }
+        button { padding: 15px 30px; font-size: 20px; background: #ff4d4d; color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 5px 0 #b33636; font-family: inherit; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <div class="login-card">
-            <h1 style="margin-top:0">PIXEL STARS</h1>
-            <p>Enter your racer name:</p>
-            <input type="text" id="nickInput" placeholder="MARIO" maxlength="10">
-            <br>
-            <button onclick="startGame()">START RACE</button>
+        <div class="card">
+            <h1>🏃 TRACK STARS 🏃</h1>
+            <input type="text" id="nick" placeholder="Name..." maxlength="10" style="padding:10px; font-size:18px;">
+            <br><br>
+            <button onclick="start()">ENTER STADIUM</button>
         </div>
-    </div>
-
-    <div id="ui-container">
-        <h2 id="status-text">WAITING FOR RACERS...</h2>
-        <p>MASH [SPACEBAR] TO RUN!</p>
     </div>
 
     <canvas id="gameCanvas" width="800" height="400"></canvas>
@@ -108,131 +28,115 @@
     const socket = io();
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    
     let players = {};
+    let fireworks = [];
     let audioCtx = null;
 
-    // Initialize sound and join the game
-    function startGame() {
-        const name = document.getElementById('nickInput').value.toUpperCase() || "RACER";
-        
-        // Start Audio (Browsers require user click)
+    function start() {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        socket.emit('setNickname', name);
+        socket.emit('setNickname', document.getElementById('nick').value || "Racer");
         document.getElementById('overlay').style.display = 'none';
-        document.getElementById('status-text').innerText = "RACE IN PROGRESS!";
     }
 
-    // --- Cutesy Sound Engine ---
-    function playStepSound() {
+    // --- Cutesy SFX for Taps ---
+    function playTapSound() {
         if (!audioCtx) return;
         const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(150 + Math.random() * 50, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
+        const g = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(200 + Math.random() * 300, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.1);
+        g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        osc.connect(g); g.connect(audioCtx.destination);
         osc.start(); osc.stop(audioCtx.currentTime + 0.1);
     }
 
-    // --- Visual Assets & Rendering ---
-    socket.on('update', (data) => { players = data; });
-
-    function drawBackground() {
-        // Draw Scrolling Clouds
-        ctx.fillStyle = "white";
-        let cloudMove = (Date.now() / 50) % 900;
-        for(let i=0; i<4; i++) {
-            let x = (i * 250 - cloudMove);
-            if (x < -100) x += 1000;
-            ctx.fillRect(x, 40 + (i%2 * 20), 60, 20);
-            ctx.fillRect(x + 10, 30 + (i%2 * 20), 40, 20);
-        }
-        
-        // Draw Ground/Track Lanes
-        ctx.fillStyle = "rgba(255,255,255,0.1)";
-        for(let i=1; i<6; i++) {
-            ctx.fillRect(0, i * 65 + 60, 800, 2);
-        }
-
-        // Checkerboard Finish Line
-        for(let i=0; i<16; i++) {
-            ctx.fillStyle = (i % 2 === 0) ? "white" : "black";
-            ctx.fillRect(750, i * 25, 25, 25);
+    // --- Fireworks Logic ---
+    function createFirework(x, y, color) {
+        for(let i=0; i<20; i++) {
+            fireworks.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1.0,
+                color: color
+            });
         }
     }
 
-    function drawRacer(p) {
-        const yBase = 80 + (p.index * 65);
-        
-        // Animation: Squash/Stretch and Bobbing
-        const speedFactor = 0.15;
-        const bob = Math.abs(Math.sin(p.x * speedFactor)) * 6;
-        const squash = Math.sin(p.x * speedFactor) * 3;
-        const victoryJump = p.isWinner ? Math.sin(Date.now() / 100) * 30 : 0;
+    socket.on('update', (data) => { 
+        players = data; 
+        Object.values(players).forEach(p => {
+            if(p.isWinner) createFirework(750, 80 + (p.index * 65), p.color);
+        });
+    });
+
+    function drawTrack() {
+        // Brown Dirt Track
+        ctx.fillStyle = "#8b4513";
+        ctx.fillRect(0, 50, 800, 330);
+        // White Lane Lines
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        for(let i=0; i<6; i++) {
+            ctx.fillRect(0, 60 + (i * 65), 800, 4);
+        }
+        // Finish Line
+        for(let i=0; i<20; i++) {
+            ctx.fillStyle = (i % 2 === 0) ? "white" : "black";
+            ctx.fillRect(750, 50 + (i * 16.5), 25, 16.5);
+        }
+    }
+
+    function drawAvatar(p) {
+        const y = 85 + (p.index * 65);
+        const bob = Math.abs(Math.sin(p.x * 0.15)) * 8;
+        const squash = Math.sin(p.x * 0.15) * 4;
 
         ctx.save();
-        ctx.translate(50 + p.x, yBase + victoryJump - bob);
+        ctx.translate(50 + p.x, y - bob);
 
-        // 1. Shoes
-        ctx.fillStyle = "#333";
-        ctx.fillRect(2 - squash, 25, 10 + squash, 8);
-        ctx.fillRect(18 + squash, 25, 10 - squash, 8);
-
-        // 2. Body (Overalls style)
+        // Body
         ctx.fillStyle = p.color;
-        ctx.fillRect(0 - (squash/2), 0, 30 + squash, 28);
-        ctx.fillStyle = "rgba(0,0,0,0.2)"; // Straps
-        ctx.fillRect(6, 0, 4, 15); ctx.fillRect(20, 0, 4, 15);
-
-        // 3. Head
-        ctx.fillStyle = "#ffdbac";
-        ctx.fillRect(5, -15, 20, 18);
-        
-        // 4. Hat
-        ctx.fillStyle = p.color;
-        ctx.fillRect(2, -18, 22, 6); // Cap top
-        ctx.fillRect(18, -15, 10, 3); // Brim
-
-        // 5. Name & Winner UI
+        ctx.fillRect(-15, -15 + squash, 30, 30 - squash); 
+        // Eyes
         ctx.fillStyle = "white";
-        ctx.font = "bold 14px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(p.name, 15, -25);
+        ctx.fillRect(5, -10, 6, 6); ctx.fillRect(15, -10, 6, 6);
+        ctx.fillStyle = "black";
+        ctx.fillRect(8, -8, 3, 3); ctx.fillRect(18, -8, 3, 3);
+        // Little Hat
+        ctx.fillStyle = "gold";
+        ctx.fillRect(-5, -20, 10, 5);
 
-        if (p.isWinner) {
-            ctx.fillStyle = "gold";
-            ctx.fillText("🏆 WINNER!", 15, -45);
+        if(p.isWinner) {
+            ctx.fillStyle = "yellow";
+            ctx.font = "20px Arial";
+            ctx.fillText("⭐", -5, -30);
         }
         ctx.restore();
     }
 
-    function renderLoop() {
-        // Clear sky
-        ctx.fillStyle = "#5c94fc";
-        ctx.fillRect(0, 0, 800, 400);
+    function loop() {
+        ctx.fillStyle = "#5c94fc"; ctx.fillRect(0,0,800,400); // Sky
+        drawTrack();
 
-        drawBackground();
+        // Draw Fireworks
+        fireworks.forEach((f, i) => {
+            ctx.fillStyle = f.color;
+            ctx.globalAlpha = f.life;
+            ctx.fillRect(f.x, f.y, 4, 4);
+            f.x += f.vx; f.y += f.vy; f.life -= 0.02;
+            if(f.life <= 0) fireworks.splice(i, 1);
+        });
+        ctx.globalAlpha = 1.0;
 
-        // Draw all players
-        Object.values(players).forEach(drawRacer);
-
-        requestAnimationFrame(renderLoop);
+        Object.values(players).forEach(drawAvatar);
+        requestAnimationFrame(loop);
     }
 
-    // Input Handling
-    window.addEventListener('keydown', (e) => {
-        if (e.code === 'Space') {
-            socket.emit('move');
-            playStepSound();
-        }
+    window.addEventListener('keydown', (e) => { 
+        if(e.code === 'Space') { socket.emit('move'); playTapSound(); }
     });
-
-    // Start the animation loop
-    renderLoop();
+    loop();
 </script>
 </body>
 </html>
