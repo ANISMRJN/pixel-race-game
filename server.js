@@ -11,12 +11,15 @@ let gameFinished = false;
 
 io.on("connection", (socket) => {
   socket.on("setNickname", (name) => {
+    // Assign a lane based on how many players are already there (0-4)
+    const playerCount = Object.keys(players).length;
+    
     players[socket.id] = {
       id: socket.id,
-      name: name,
+      name: name.toUpperCase(),
       x: 0,
-      index: Object.keys(players).length,
-      color: ["#ff4d4d", "#4dff4d", "#4db8ff", "#ffff4d", "#ff4dff"][Object.keys(players).length % 5],
+      lane: playerCount % 5, // Ensures they stay in separate lanes
+      color: ["#ff4d4d", "#4dff4d", "#4db8ff", "#ffff4d", "#ff4dff"][playerCount % 5],
       isWinner: false
     };
     io.emit("update", players);
@@ -24,12 +27,15 @@ io.on("connection", (socket) => {
 
   socket.on("move", () => {
     if (players[socket.id] && !gameFinished) {
-      players[socket.id].x += 12;
+      players[socket.id].x += 10;
+      
       if (players[socket.id].x >= 710) {
         players[socket.id].isWinner = true;
         gameFinished = true;
+        io.emit("winner", players[socket.id].name);
       }
-      io.emit("update", players);
+      // Use volatile.emit for faster updates during mashing
+      io.volatile.emit("update", players);
     }
   });
 
@@ -40,4 +46,4 @@ io.on("connection", (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+http.listen(PORT, () => console.log(`Server live on ${PORT}`));
