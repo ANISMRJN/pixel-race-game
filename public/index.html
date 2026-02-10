@@ -1,29 +1,101 @@
-// --- UNIVERSAL INPUT (Works for Space, Click, and Touch) ---
-    function handleAction(e) {
-        // Only run if the login screen is gone
-        if(document.getElementById('overlay').style.display === 'none') {
-            socket.emit('move');
-            playTapSound();
-        }
-    }
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pixel Track Stars</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* This part makes it look like a game */
+        body { background: #5c94fc; color: white; font-family: 'Courier New', monospace; text-align: center; margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; touch-action: manipulation; }
+        canvas { background: #4a7c44; border: 6px solid #8b4513; image-rendering: pixelated; box-shadow: 0 10px 0 #5d2e0a; max-width: 95vw; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        .card { background: white; padding: 20px; border-radius: 15px; color: #333; border: 5px solid #f8b800; }
+        button { padding: 10px 20px; background: #ff4d4d; color: white; border: none; border-radius: 5px; cursor: pointer; font-family: inherit; box-shadow: 0 4px 0 #b33636; }
+    </style>
+</head>
+<body>
 
-    // 1. Keyboard (Spacebar)
-    window.addEventListener('keydown', (e) => { 
-        if(e.code === 'Space') handleAction(e); 
-    });
+    <div id="overlay">
+        <div class="card">
+            <h2>🏃 PIXEL RACE 🏃</h2>
+            <input type="text" id="nick" placeholder="Enter Name" maxlength="10" style="padding:10px;">
+            <br><br>
+            <button onclick="start()">JOIN RACE</button>
+        </div>
+    </div>
 
-    // 2. The "Everything" Listener (Mouse + Touch)
-    // We attach this to the WHOLE body so you can tap ANYWHERE on the screen
-    window.addEventListener('pointerdown', (e) => {
-        // Ignore clicks on the Join button/input so you can still type
-        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
-            handleAction(e);
-        }
-    });
+    <h2 id="status" style="text-shadow: 2px 2px #000;">MASH TO RUN!</h2>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
 
-    // Prevent annoying zoom-on-tap on mobile
-    window.addEventListener('touchstart', (e) => {
-        if (e.target.tagName !== 'INPUT') {
-            e.preventDefault();
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let players = {};
+        let audioCtx = null;
+
+        function start() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            socket.emit('setNickname', document.getElementById('nick').value || "Racer");
+            document.getElementById('overlay').style.display = 'none';
         }
-    }, { passive: false });
+
+        function playTapSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.frequency.setValueAtTime(200 + Math.random() * 200, audioCtx.currentTime);
+            g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // --- THE UNIVERSAL INPUT CODE GOES INSIDE HERE ---
+        function handleAction(e) {
+            if(document.getElementById('overlay').style.display === 'none') {
+                socket.emit('move');
+                playTapSound();
+            }
+        }
+
+        window.addEventListener('keydown', (e) => { if(e.code === 'Space') handleAction(e); });
+        
+        window.addEventListener('pointerdown', (e) => {
+            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+                handleAction(e);
+            }
+        });
+
+        window.addEventListener('touchstart', (e) => {
+            if (e.target.tagName !== 'INPUT') e.preventDefault();
+        }, { passive: false });
+
+        // --- DRAWING LOGIC ---
+        socket.on('update', (data) => { players = data; });
+
+        function loop() {
+            ctx.fillStyle = "#5c94fc"; ctx.fillRect(0,0,800,400); // Sky
+            
+            // Draw Track
+            ctx.fillStyle = "#8b4513"; ctx.fillRect(0, 50, 800, 330);
+            ctx.fillStyle = "rgba(255,255,255,0.3)";
+            for(let i=0; i<6; i++) ctx.fillRect(0, 60 + (i * 65), 800, 4);
+
+            // Draw Players
+            Object.values(players).forEach(p => {
+                const y = 85 + (p.index * 65);
+                const bob = Math.abs(Math.sin(p.x * 0.15)) * 8;
+                ctx.save();
+                ctx.translate(50 + p.x, y - bob);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-15, -15, 30, 30);
+                ctx.fillStyle = "white"; ctx.font = "bold 12px Arial";
+                ctx.fillText(p.name, -10, -20);
+                if(p.isWinner) ctx.fillText("🏆", -5, -40);
+                ctx.restore();
+            });
+            requestAnimationFrame(loop);
+        }
+        loop();
+    </script>
+</body>
+</html>
