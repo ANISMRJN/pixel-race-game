@@ -8,11 +8,19 @@
     <style>
         body { background: #5c94fc; color: white; font-family: 'Courier New', monospace; text-align: center; margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; touch-action: manipulation; }
         canvas { background: #4a7c44; border: 6px solid #8b4513; image-rendering: pixelated; box-shadow: 0 10px 0 #5d2e0a; max-width: 95vw; }
+        
+        /* Overlay UI */
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
         .card { background: white; padding: 30px; border-radius: 20px; color: #333; border: 6px solid #f8b800; width: 280px; }
+        
         input { padding: 12px; font-size: 18px; border: 3px solid #5c94fc; border-radius: 8px; width: 80%; margin-bottom: 15px; outline: none; }
+        
+        /* Buttons */
         button { padding: 15px 30px; font-size: 20px; background: #ff4d4d; color: white; border: none; border-radius: 10px; cursor: pointer; font-family: inherit; box-shadow: 0 5px 0 #b33636; width: 100%; }
         button:disabled { background: #ccc; box-shadow: 0 5px 0 #999; cursor: not-allowed; }
+        button:active { transform: translateY(3px); box-shadow: 0 2px 0 #b33636; }
+        
+        #resetBtn { display: none; position: fixed; bottom: 30px; background: #4dff4d; box-shadow: 0 5px 0 #2d9d2d; width: 200px; z-index: 50; }
         #status { text-shadow: 2px 2px #000; margin: 10px; height: 30px; }
     </style>
 </head>
@@ -29,46 +37,59 @@
     </div>
 
     <h2 id="status">MASH TO RUN!</h2>
+    
     <canvas id="gameCanvas" width="800" height="400"></canvas>
+    
+    <button id="resetBtn">PLAY AGAIN</button>
 
     <script>
         const socket = io();
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const startBtn = document.getElementById('startBtn');
+        const resetBtn = document.getElementById('resetBtn');
         const overlay = document.getElementById('overlay');
         const nickInput = document.getElementById('nick');
+        const statusText = document.getElementById('status');
         
         let players = {};
         let audioCtx = null;
         let isJoined = false;
 
-        // --- 1. CONNECTIVITY CHECK ---
-        // This ensures the button only works when the server is actually ready
+        // --- 1. CONNECTION ---
         socket.on('connect', () => {
             startBtn.innerText = "JOIN RACE";
             startBtn.disabled = false;
         });
 
-        socket.on('connect_error', () => {
-            startBtn.innerText = "WAKING UP SERVER...";
-            startBtn.disabled = true;
-        });
-
-        // --- 2. JOIN ACTION ---
-        function attemptJoin() {
+        // --- 2. JOIN ---
+        startBtn.onclick = () => {
             const name = nickInput.value.trim() || "Racer";
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            
             socket.emit('setNickname', name);
             overlay.style.display = 'none';
             isJoined = true;
-        }
+        };
 
-        startBtn.onclick = attemptJoin;
+        // --- 3. RESET ---
+        resetBtn.onclick = () => {
+            socket.emit('resetGame');
+        };
 
-        // --- 3. THE "ANTI-LAG" UPDATE ---
+        socket.on('gameReset', () => {
+            resetBtn.style.display = 'none';
+            statusText.innerText = "MASH TO RUN!";
+            // Reset local positions for smooth transition back to start
+            for (let id in players) {
+                players[id].x = 0;
+                players[id].targetX = 0;
+                players[id].isWinner = false;
+            }
+        });
+
+        // --- 4. DATA SYNC ---
         socket.on('update', (serverPlayers) => {
+            let someoneWon = false;
             for (let id in serverPlayers) {
                 if (!players[id]) {
                     players[id] = { ...serverPlayers[id], x: serverPlayers[id].x };
@@ -78,15 +99,19 @@
                     players[id].lane = serverPlayers[id].lane;
                     players[id].name = serverPlayers[id].name;
                 }
+                if (serverPlayers[id].isWinner) someoneWon = true;
             }
+            // Show Reset Button if there's a winner
+            if (someoneWon) resetBtn.style.display = 'block';
+
             for (let id in players) {
                 if (!serverPlayers[id]) delete players[id];
             }
         });
 
-        // --- 4. INPUT ---
+        // --- 5. INPUT ---
         function handleMove() {
-            if(isJoined) {
+            if(isJoined && resetBtn.style.display !== 'block') {
                 socket.emit('move');
                 if(audioCtx) {
                     const osc = audioCtx.createOscillator();
@@ -104,7 +129,7 @@
             if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') handleMove();
         };
 
-        // --- 5. DRAW LOOP ---
+        // --- 6. DRAW LOOP ---
         function loop() {
             ctx.fillStyle = "#5c94fc"; ctx.fillRect(0,0,800,400); // Sky
             
@@ -115,7 +140,8 @@
 
             for (let id in players) {
                 let p = players[id];
-                if (p.targetX !== undefined) p.x += (p.targetX - p.x) * 0.3; // Smooth slide
+                // Smooth interpolation
+                if (p.targetX !== undefined) p.x += (p.targetX - p.x) * 0.3;
 
                 const y = 85 + (p.lane * 65);
                 const bob = Math.abs(Math.sin(p.x * 0.15)) * 8;
@@ -131,7 +157,7 @@
                 if(p.isWinner) {
                     ctx.font = "24px Arial";
                     ctx.fillText("🏆", 0, -45);
-                    document.getElementById('status').innerText = p.name + " WINS!";
+                    statusText.innerText = p.name + " WINS!";
                 }
                 ctx.restore();
             }
